@@ -32,7 +32,11 @@ def get_input_encoding(inputs, initializer=None, scope=None):
 
 def get_output_module(
         last_state,
+        query_embedding,
         encoded_query,
+        decoder_inputs, #new
+        embedding_matrix, #new
+        mode, #new
         num_blocks,
         vocab_size,
         activation=tf.nn.relu,
@@ -59,16 +63,76 @@ def get_output_module(
         u = tf.reduce_sum(last_state * attention, axis=1)
 
         # R acts as the decoder matrix to convert from internal state to the output vocabulary size
-        R = tf.get_variable('R', [embedding_size, vocab_size])
+        hidden_size = 100
+        R = tf.get_variable('R', [embedding_size, hidden_size])
         H = tf.get_variable('H', [embedding_size, embedding_size])
 
         q = tf.squeeze(encoded_query, axis=1)
         y = tf.matmul(activation(q + tf.matmul(u, H)), R)
-        return y
+
+        #################
+        # seq2seq_begin #
+        #################
+
+        # encoder
+        # seq_input = query
+        _, _, max_length, _ = query_embedding.get_shape().as_list()
+        batch_size = tf.shape(query_embedding)[0]
+        seq_length = tf.ones([batch_size], dtype=tf.int32) * max_length
+        y_temp = y
+        for t in max_length:
+            y = tf.concat((y, y_temp), 1)
+        y = tf.reshape(y, [max_length, -1, hidden_size])
+        y = tf.transpose(y, [1, 0, 2])
+
+        lstm_fw = tf.contrib.rnn.LSTMCell(hidden_size/2, forget_bias=1.0)
+        lstm_bw = tf.contrib.rnn.LSTMCell(hidden_size/2, forget_bias=1.0)
+        encoder_outputs, state = tf.nn.bidirectional_dynamic_rnn(
+            cell_fw=lstm_fw, cell_bw=lstm_bw, dtype=tf.float32,
+            sequence_length=seq_length, inputs=pos_emb_data, time_major=False)
+        output_fw, output_bw = encoder_outputs
+        state_fw, state_bw = state
+        encoder_outputs = tf.concat([y, output_fw, output_bw], 2)
+        encoder_state_c = tf.concat((state_fw.c, state_bw.c), 1)
+        encoder_state_h = tf.concat((state_fw.h, state_bw.h), 1)
+        encoder_state = tf.contrib.rnn.LSTMStateTuple(c=encoder_state_c, h=encoder_state_h)
+
+        # decoder
+        BOS = tf.ones([batch_size, 1], dtype=tf.int32)
+        decoder_inputs = tf.concat([BOS, decoder_inputs], axis=1)
+        decoder_inputs = tf.unstack(tf.nn.embedding_lookup(embedding_matrix, decoder_inputs))
+        
+        def test_loop(prev, i):
+            prev_index = tf.stop_gradient(tf.argmax(prev, axis=-1))
+            pred_prev = tf.nn.embedding_lookup(embedding_matrix, prev_index)
+            return pred_prev
+        def train_loop(prev, i):
+            pred_prev = tf.nn.embedding_lookup(embedding_matrix, decoder_inputs[i])
+            return pred_prev
+
+        cell = tf.contrib.rnn.LSTMCell(num_units=hidden_size*2)
+        if mode == tf.contrib.learn.ModeKeys.TRAIN:
+        	loop_function = train_loop
+        elif mode == tf.contrib.learn.ModeKeys.INFER:
+        	loop_function = test_loop
+
+        output, _ = tf.contrib.legacy_seq2seq.attention_decoder(
+					decoder_inputs = decoder_inputs,
+					initial_state = encoder_state,
+					attention_states = encoder_outputs,
+					cell = cell,
+					output_size = vocab_size,
+					loop_function = loop_function, 
+					)
+        return output
+        #################
+        #  seq2seq_end  #
+        #################
+
     outputs = None
     return outputs
 
-def get_outputs(inputs, params):
+def get_outputs(inputs, answers, params, mode):
     "Return the outputs from the model which will be used in the loss function."
     embedding_size = params['embedding_size']
     num_blocks = params['num_blocks']
@@ -150,6 +214,10 @@ def get_outputs(inputs, params):
         outputs = get_output_module(
             last_state=last_state,
             encoded_query=encoded_query,
+            query_embedding=query_embedding,
+            decoder_inputs=answers, #new
+            embedding_matrix=embedding_params_masked, #new
+            mode=mode, #new
             num_blocks=num_blocks,
             vocab_size=vocab_size,
             initializer=normal_initializer,
@@ -162,19 +230,21 @@ def get_outputs(inputs, params):
 
 def get_predictions(outputs):
     "Return the actual predictions for use with evaluation metrics or TF Serving."
-    predictions = tf.argmax(outputs, axis=-1)
+    outputs = tf.stack(outputs, axis=1)
+    predictions = tf.cast(tf.argmax(outputs, axis=-1), tf.int32)
     return predictions
 
-def get_loss(outputs, labels, mode):
+def get_loss(outputs, labels, labels_lengths, mode):
     "Return the loss function which will be used with an optimizer."
 
     loss = None
     if mode == tf.contrib.learn.ModeKeys.INFER:
         return loss
+    PAD = tf.ones([batch_size, 1], dtype=tf.int32)*0
+    targets = tf.unstack(tf.concat([labels, PAD], axis=1))
+    weights = tf.unstack(labels_lengths)
+    loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(logits=outputs, targets=targets, weights=weights)
 
-    loss = tf.losses.sparse_softmax_cross_entropy(
-        logits=outputs,
-        labels=labels)
     return loss
 
 def get_train_op(loss, params, mode):
@@ -203,12 +273,12 @@ def get_train_op(loss, params, mode):
 
     return train_op
 
-def model_fn(features, labels, mode, params):
+def model_fn(features, labels, labels_lengths, mode, params):
     "Return ModelFnOps for use with Estimator."
 
-    outputs = get_outputs(features, params)
+    outputs = get_outputs(features, labels, params, mode)
     predictions = get_predictions(outputs)
-    loss = get_loss(outputs, labels, mode)
+    loss = get_loss(outputs, labels, labels_lengths, mode)
     train_op = get_train_op(loss, params, mode)
 
     return tf.contrib.learn.ModelFnOps(
