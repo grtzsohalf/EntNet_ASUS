@@ -15,6 +15,13 @@ from entity_networks.model_ops import cyclic_learning_rate, \
                                       count_parameters, \
                                       prelu
 
+OPTIMIZER_SUMMARIES = [
+    "learning_rate",
+    "loss",
+    "gradients",
+    "gradient_norm",
+]
+
 def get_input_encoding(inputs, initializer=None, scope=None):
     """
     Implementation of the learned multiplicative mask from Section 2.1, Equation 1.
@@ -144,7 +151,6 @@ def get_outputs(inputs, answers, params, mode):
     batch_size = tf.shape(story)[0]
 
     normal_initializer = tf.random_normal_initializer(stddev=0.1)
-    ortho_initializer = tf.orthogonal_initializer(gain=1.0)
     ones_initializer = tf.constant_initializer(1.0)
 
     # Extend the vocab to include keys for the dynamic memory cell,
@@ -198,7 +204,7 @@ def get_outputs(inputs, answers, params, mode):
             num_units_per_block=embedding_size,
             keys=keys,
             initializer=normal_initializer,
-            recurrent_initializer=ortho_initializer,
+            recurrent_initializer=normal_initializer,
             activation=activation)
 
         # Recurrence
@@ -260,6 +266,7 @@ def get_train_op(loss, params, mode):
         learning_rate_min=params['learning_rate_min'],
         learning_rate_max=params['learning_rate_max'],
         step_size=params['learning_rate_step_size'],
+        mode='triangular',
         global_step=global_step)
     tf.summary.scalar('learning_rate', learning_rate)
 
@@ -269,7 +276,8 @@ def get_train_op(loss, params, mode):
         learning_rate=learning_rate,
         optimizer='Adam',
         clip_gradients=params['clip_gradients'],
-        name=None)
+        gradient_noise_scale=params['gradient_noise_scale'],
+        summaries=OPTIMIZER_SUMMARIES)
 
     return train_op
 
