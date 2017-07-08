@@ -22,13 +22,17 @@ def generate_input_fn(filename, metadata, batch_size, num_epochs=None, shuffle=F
                 shape=[1, max_query_length],
                 dtype=tf.int64)
             answer_feature = tf.FixedLenFeature(
-                shape=[],
+                shape=[1, 49],
+                dtype=tf.int64)
+            answer_length_feature = tf.FixedLenFeature(
+                shape=[1, 50],
                 dtype=tf.int64)
 
             features = {
                 'story': story_feature,
                 'query': query_feature,
                 'answer': answer_feature,
+                'answer_length': answer_length_feature
             }
 
             record_features = tf.contrib.learn.read_batch_record_features(
@@ -41,12 +45,16 @@ def generate_input_fn(filename, metadata, batch_size, num_epochs=None, shuffle=F
             story = record_features['story']
             query = record_features['query']
             answer = record_features['answer']
+            answer_length = record_features['answer_length']
 
             features = {
                 'story': story,
                 'query': query,
             }
-
-            return features, answer
+            answers = {
+                'answer': answer,
+                'answer_length': answer_length
+            }
+            return features, answers
 
     return _input_fn

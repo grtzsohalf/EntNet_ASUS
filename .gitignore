@@ -1,5 +1,8 @@
-data/
-logs/
-.env/
+assets/*
+data/*
+dataset/*
+logs/*
+model/*
+.env/*
 *.pyc
 .DS_Store

@@ -17,7 +17,7 @@ def main():
     parser.add_argument(
         '--data-dir',
         help='Directory containing data',
-        default='data/babi/records/')
+        default='data/ASUS/records/')
     parser.add_argument(
         '--dataset-id',
         help='Unique id identifying dataset',

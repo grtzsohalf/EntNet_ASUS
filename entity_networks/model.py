@@ -87,7 +87,7 @@ def get_output_module(
         batch_size = tf.shape(query_embedding)[0]
         seq_length = tf.ones([batch_size], dtype=tf.int32) * max_length
         y_temp = y
-        for t in max_length:
+        for t in range(max_length):
             y = tf.concat((y, y_temp), 1)
         y = tf.reshape(y, [max_length, -1, hidden_size])
         y = tf.transpose(y, [1, 0, 2])
@@ -96,7 +96,7 @@ def get_output_module(
         lstm_bw = tf.contrib.rnn.LSTMCell(hidden_size/2, forget_bias=1.0)
         encoder_outputs, state = tf.nn.bidirectional_dynamic_rnn(
             cell_fw=lstm_fw, cell_bw=lstm_bw, dtype=tf.float32,
-            sequence_length=seq_length, inputs=pos_emb_data, time_major=False)
+            sequence_length=seq_length, inputs=query_embedding, time_major=False)
         output_fw, output_bw = encoder_outputs
         state_fw, state_bw = state
         encoder_outputs = tf.concat([y, output_fw, output_bw], 2)
@@ -281,12 +281,12 @@ def get_train_op(loss, params, mode):
 
     return train_op
 
-def model_fn(features, labels, labels_lengths, mode, params):
+def model_fn(features, labels, mode, params):
     "Return ModelFnOps for use with Estimator."
 
-    outputs = get_outputs(features, labels, params, mode)
+    outputs = get_outputs(features, labels['answer'], params, mode)
     predictions = get_predictions(outputs)
-    loss = get_loss(outputs, labels, labels_lengths, mode)
+    loss = get_loss(outputs, labels['answer'], labels['answer_length'], mode)
     train_op = get_train_op(loss, params, mode)
 
     return tf.contrib.learn.ModelFnOps(

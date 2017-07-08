@@ -17,75 +17,49 @@ def main():
     parser.add_argument(
         '--data-dir',
         help='Directory containing data',
-        default='data/babi/records/')
+        default='data/ASUS/records/')
     args = parser.parse_args()
 
-    tasks_dir = 'tasks/'
+    metadata_path = os.path.join(args.data_dir, 'asus_169k_maxL50.json')
+    with open(metadata_path) as metadata_file:
+        metadata = json.load(metadata_file)
 
-    if not os.path.exists(tasks_dir):
-        os.makedirs(tasks_dir)
+    filename = os.path.join(data_dir, 'asus_169k_maxL50_test.tfrecords')
+    input_fn = generate_input_fn(
+        filename=eval_filename,
+        metadata=metadata,
+        batch_size=BATCH_SIZE,
+        num_epochs=1,
+        shuffle=False)
 
-    task_names = [
-        'qa1_single-supporting-fact',
-        'qa2_two-supporting-facts',
-        'qa3_three-supporting-facts',
-        'qa4_two-arg-relations',
-        'qa5_three-arg-relations',
-        'qa6_yes-no-questions',
-        'qa7_counting',
-        'qa8_lists-sets',
-        'qa9_simple-negation',
-        'qa10_indefinite-knowledge',
-        'qa11_basic-coreference',
-        'qa12_conjunction',
-        'qa13_compound-coreference',
-        'qa14_time-reasoning',
-        'qa15_basic-deduction',
-        'qa16_basic-induction',
-        'qa17_positional-reasoning',
-        'qa18_size-reasoning',
-        'qa19_path-finding',
-        'qa20_agents-motivations',
-    ]
+    with tf.Graph().as_default():
+        features, answers = input_fn()
 
-    for task_name in tqdm(task_name.iteritems()):
-        metadata_path = os.path.join(args.data_dir, '{}_10k.json'.format(task_name))
-        with open(metadata_path) as metadata_file:
-            metadata = json.load(metadata_file)
+        story = features['story']
+        query = features['query']
+        answer = answers['answer']
+        answer_length = answers['answer_length']
 
-        filename = os.path.join(data_dir, '{}_10k_{}.tfrecords'.format(dataset_id, 'test'))
-        input_fn = generate_input_fn(
-            filename=eval_filename,
-            metadata=metadata,
-            batch_size=BATCH_SIZE,
-            num_epochs=1,
-            shuffle=False)
+        instances = []
 
-        with tf.Graph().as_default():
-            features, answer = input_fn()
+        with tf.train.SingularMonitoredSession() as sess:
+            while not sess.should_stop():
+                story_, query_, answer_, answer_length_ = sess.run([story, query, answer, answer_length])
 
-            story = features['story']
-            query = features['query']
+                instance = {
+                    'story': story_[0].tolist(),
+                    'query': query_[0].tolist(),
+                    'answer': answer_[0].tolist(),
+                    'answer_length': answer_length_[0].tolist(),
+                }
 
-            instances = []
+                instances.append(instance)
 
-            with tf.train.SingularMonitoredSession() as sess:
-                while not sess.should_stop():
-                    story_, query_, answer_ = sess.run([story, query, answer])
+        metadata['instances'] = random.sample(instances, k=10)
 
-                    instance = {
-                        'story': story_[0].tolist(),
-                        'query': query_[0].tolist(),
-                        'answer': answer_[0].tolist(),
-                    }
-
-                    instances.append(instance)
-
-            metadata['instances'] = random.sample(instances, k=10)
-
-            output_path = os.path.join(tasks_dir, '{}.json'.format(task_name))
-            with open(output_path, 'w') as f:
-                f.write(json.dumps(metadata))
+        output_path = 'asus_output.json'
+        with open(output_path, 'w') as f:
+            f.write(json.dumps(metadata))
 
 if __name__ == '__main__':
     main()

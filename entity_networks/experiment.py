@@ -21,12 +21,12 @@ def generate_experiment_fn(data_dir, dataset_id, num_epochs,
                            learning_rate_step_size, gradient_noise_scale):
     "Return _experiment_fn for use with learn_runner."
     def _experiment_fn(output_dir):
-        metadata_path = os.path.join(data_dir, '{}_10k.json'.format(dataset_id))
+        metadata_path = os.path.join(data_dir, 'asus_169k_maxL50.json')
         with tf.gfile.Open(metadata_path) as metadata_file:
             metadata = json.load(metadata_file)
 
-        train_filename = os.path.join(data_dir, '{}_10k_{}.tfrecords'.format(dataset_id, 'train'))
-        eval_filename = os.path.join(data_dir, '{}_10k_{}.tfrecords'.format(dataset_id, 'test'))
+        train_filename = os.path.join(data_dir, 'asus_169k_maxL50_train.tfrecords')
+        eval_filename = os.path.join(data_dir, 'asus_169k_maxL50_test.tfrecords')
 
         train_input_fn = generate_input_fn(
             filename=train_filename,
