@@ -1,6 +1,6 @@
 assets/*
 data/*
-dataset/*
+datasets/*
 logs/*
 model/*
 .env/*
