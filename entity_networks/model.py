@@ -117,6 +117,8 @@ def get_output_module(
         true_inputs = tf.concat([BOS, true_inputs], axis=-1)
         # print (true_inputs.shape)
         decoder_inputs = tf.nn.embedding_lookup(embedding_matrix, true_inputs)
+        # print ('embedding_matrix~~~~~~~~~~~~')
+        # print (embedding_matrix.shape)
         _, _, l, h = decoder_inputs.get_shape().as_list()
         decoder_inputs = tf.reshape(decoder_inputs, [-1, l, h])
         # print (decoder_inputs.shape)
@@ -194,7 +196,7 @@ def get_outputs(inputs, answers, params, mode):
             shape=[vocab_size, 1],
             dtype=tf.float32)
         embedding_params_masked = embedding_params * embedding_mask
-        # print ('~~~~~~~~~~~~~~~~~~~~~~')
+        # print ('embedding_params_masked~~~~~~~~~~~~~~~~~~~~~~')
         # print (embedding_params_masked.shape)
 
         story_embedding = tf.nn.embedding_lookup(embedding_params_masked, story)
@@ -269,12 +271,17 @@ def get_loss(outputs, labels, labels_lengths, mode):
     PAD = tf.ones([batch_size, 1], dtype=tf.int64)*0
     _, _, l = labels.get_shape().as_list()
     labels = tf.reshape(labels, [-1, l])
-    targets = tf.unstack(tf.concat([labels, PAD], axis=1), axis=1)
+    targets = tf.concat([labels, PAD], axis=1)
+    targets = tf.unstack(targets, axis=1)
+    # print ('targets~~~~~~~~~~~~~~')
+    # print (targets.shape)
     _, _, l = labels_lengths.get_shape().as_list()
     labels_lengths = tf.reshape(labels_lengths, [-1, l])
     # print ('label_length~~~~~~~~~~~~')
     # print (labels_lengths.shape)
-    weights = tf.unstack(tf.cast(labels_lengths, tf.float32), axis=1)
+    weights = tf.cast(labels_lengths, tf.float32)
+    weights = tf.unstack(weights, axis=1)
+    # loss = tf.contrib.seq2seq.sequence_loss(logits=tf.stack(outputs), targets=targets, weights=weights)
     loss = tf.contrib.legacy_seq2seq.sequence_loss(logits=outputs, targets=targets, weights=weights)
 
     return loss
