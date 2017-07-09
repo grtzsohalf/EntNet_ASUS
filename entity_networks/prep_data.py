@@ -37,6 +37,7 @@ SPLIT_RE = re.compile(r'(\W+)?')
 PAD_TOKEN = '_PAD'
 PAD_ID = 0
 MAX_L = 50
+train_test_split = 615218
 
 def tokenize(sentence):
     "Tokenize a string by splitting on non-word characters and stripping whitespace."
@@ -104,7 +105,7 @@ def parse_stories(lines, only_supporting=False):
     print("~~~~~~~~Part stories: {0}".format(n_part_story))
     print("~~~~~~~~Total: {0}".format(n_full_story + n_part_story))
     stories = [(x[0], x[1], x[2], len(x[2])+1) for x in stories]
-    return stories
+    return stories[:train_test_split], stories[train_test_split:]
 
 def save_dataset(stories, path):
     """
@@ -115,12 +116,13 @@ def save_dataset(stories, path):
     _slightly_ faster.
     """
     writer = tf.python_io.TFRecordWriter(path)
+    counter = 0
     print("~~~~~~~~Ready to write~~~~~~~~")
     for story, query, answer, ans_length in stories:
-        print("~~~Flat story~~~", end='')
+        # print("~~~Flat story~~~", end='')
         story_flat = [token_id for sentence in story for token_id in sentence]
 
-        print("~~~Feature sep~~~", end='')
+        # print("~~~Feature sep~~~", end='')
         story_feature = tf.train.Feature(int64_list=tf.train.Int64List(value=story_flat))
         query_feature = tf.train.Feature(int64_list=tf.train.Int64List(value=query))
         answer_feature = tf.train.Feature(int64_list=tf.train.Int64List(value=answer))
@@ -129,7 +131,7 @@ def save_dataset(stories, path):
         ans_length_weight = ans_length_weight.tolist()
         ans_length_feature = tf.train.Feature(int64_list=tf.train.Int64List(value=ans_length_weight))
 
-        print("~~~all~~~", end='')
+        # print("~~~all~~~", end='')
         features = tf.train.Features(feature={
             'story': story_feature,
             'query': query_feature,
@@ -137,10 +139,13 @@ def save_dataset(stories, path):
             'answer_length': ans_length_feature,
         })
 
-        print("~~~Example~~~", end='')
+        # print("~~~Example~~~", end='')
         example = tf.train.Example(features=features)
-        print("~~~Write file~~~")
+        # print("~~~Write file~~~")
         writer.write(example.SerializeToString())
+
+        counter += 1
+        print("{0}".format(counter), end='\r')
     print("~~~finish~~~")
     writer.close()
 
@@ -221,13 +226,15 @@ def main():
 
     for task_id, task_name, task_title in tqdm(zip(task_ids, task_names, task_titles), \
             desc='Processing datasets into records...'):
-        stories_path_train = os.path.join(FLAGS.source_path)
+        stories_path = os.path.join(FLAGS.source_path)
         if FLAGS.only_50k:
             dataset_path_train = os.path.join(FLAGS.output_dir, task_id + '_50k_maxL' + str(MAX_L) + '_train.tfrecords')
+            dataset_path_test = os.path.join(FLAGS.output_dir, task_id + '_50k_maxL' + str(MAX_L) + '_test.tfrecords')
             metadata_path = os.path.join(FLAGS.output_dir, task_id + '_50k_maxL' + str(MAX_L) + '.json')
             task_size = 50000
         else:
             dataset_path_train = os.path.join(FLAGS.output_dir, task_id + '_169k_maxL' + str(MAX_L) + '_train.tfrecords')
+            dataset_path_test = os.path.join(FLAGS.output_dir, task_id + '_169k_maxL' + str(MAX_L) + '_test.tfrecords')
             metadata_path = os.path.join(FLAGS.output_dir, task_id + '_169k_maxL' + str(MAX_L) + '.json')
             task_size = 169175
 
@@ -242,50 +249,46 @@ def main():
 
         # tar = tarfile.open(FLAGS.source_path)
 
-        f_train = open(stories_path_train, 'r')
-        # f_test = open(stories_path_test, 'r')
+        f_story = open(stories_path, 'r')
 
         print("~~~~~Parse stories~~~~~")
-        stories_train = parse_stories(f_train.readlines())
-        # stories_test = parse_stories(f_test.readlines())
+        stories_train, stories_test = parse_stories(f_story.readlines())
 
         print("~~~~~Truncate stories~~~~~")
         stories_train = truncate_stories(stories_train, truncated_story_length)
-        # stories_test = truncate_stories(stories_test, truncated_story_length)
+        stories_test = truncate_stories(stories_test, truncated_story_length)
 
         print("~~~~~Get tokenizer~~~~~")
-        vocab, token_to_id = get_tokenizer(stories_train)
-        # vocab, token_to_id = get_tokenizer(stories_train + stories_test)
+        vocab, token_to_id = get_tokenizer(stories_train + stories_test)
         vocab_size = len(vocab)
 
         print("~~~~~Tokenize stories~~~~~")
         stories_token_train = tokenize_stories(stories_train, token_to_id)
-        # stories_token_test = tokenize_stories(stories_test, token_to_id)
-        # stories_token_all = stories_token_train + stories_token_test
+        stories_token_test = tokenize_stories(stories_test, token_to_id)
+        stories_token_all = stories_token_train + stories_token_test
         del stories_train
+        del stories_test
         del token_to_id
 
         print("~~~~~Max sentence length~~~~~", end='')
-        story_lengths = [len(sentence) for story, _, _, _ in stories_token_train for sentence in story]
+        story_lengths = [len(sentence) for story, _, _, _ in stories_token_all for sentence in story]
         max_sentence_length = max(story_lengths)
         print(str(max_sentence_length))
         print("~~~~~Average sentence length~~~~~{0}".format(sum(story_lengths)/float(len(story_lengths))))
         del story_lengths
-        # story_lengths = [len(sentence) for story, _, _ in stories_token_all for sentence in story]
 
         print("~~~~~Max story length~~~~~", end='')
-        max_story_length = max([len(story) for story, _, _, _ in stories_token_train])
+        max_story_length = max([len(story) for story, _, _, _ in stories_token_all])
         print(str(max_story_length))
-        # max_story_length = max([len(story) for story, _, _ in stories_token_all])
 
         print("~~~~~Max query length~~~~~", end='')
-        max_query_length = max([len(query) for _, query, _, _ in stories_token_train])
+        max_query_length = max([len(query) for _, query, _, _ in stories_token_all])
         print(str(max_query_length))
-        # max_query_length = max([len(query) for _, query, _ in stories_token_all])
 
         print("~~~~~Max answer length~~~~~", end='')
-        max_answer_length = max([ans_length for _, _, _, ans_length in stories_token_train])
+        max_answer_length = max([ans_length for _, _, _, ans_length in stories_token_all])
         print(str(max_answer_length))
+        del stories_token_all
 
         print("~~~~~Output metadata file~~~~~")
         with open(metadata_path, 'w') as f:
@@ -302,7 +305,7 @@ def main():
                 'vocab_size': vocab_size,
                 'filenames': {
                     'train': os.path.basename(dataset_path_train),
-                    # 'test': os.path.basename(dataset_path_test),
+                    'test': os.path.basename(dataset_path_test),
                 }
             }
             json.dump(metadata, f)
@@ -310,13 +313,14 @@ def main():
         print("~~~~~Pad stories~~~~~")
         stories_pad_train = pad_stories(stories_token_train, \
             max_sentence_length, max_story_length, max_query_length, max_answer_length)
-        # stories_pad_test = pad_stories(stories_token_test, \
-            # max_sentence_length, max_story_length, max_query_length)
+        stories_pad_test = pad_stories(stories_token_test, \
+            max_sentence_length, max_story_length, max_query_length, max_answer_length)
         del stories_token_train
+        del stories_token_test
 
         print("~~~~~Save dataset~~~~~")
         save_dataset(stories_pad_train, dataset_path_train)
-        # save_dataset(stories_pad_test, dataset_path_test)
+        save_dataset(stories_pad_test, dataset_path_test)
 
 if __name__ == '__main__':
     main()
