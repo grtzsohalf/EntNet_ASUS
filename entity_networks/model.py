@@ -39,7 +39,7 @@ def get_input_encoding(inputs, initializer=None, scope=None):
 
 def get_output_module(
         last_state,
-        query_embedding,
+        query_embedding, #new
         encoded_query,
         decoder_inputs, #new
         embedding_matrix, #new
@@ -83,8 +83,12 @@ def get_output_module(
 
         # encoder
         # seq_input = query
-        _, _, max_length, _ = query_embedding.get_shape().as_list()
+        print ('QUERY_EMBEDDING~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+        print (query_embedding.shape)
+        print (query_embedding)
+        batch_size, _, max_length, hidden_size = query_embedding.get_shape().as_list()
         batch_size = tf.shape(query_embedding)[0]
+        query_embedding = tf.reshape(query_embedding, [-1, max_length, hidden_size])
         seq_length = tf.ones([batch_size], dtype=tf.int32) * max_length
         y_temp = y
         for t in range(max_length):
@@ -105,8 +109,10 @@ def get_output_module(
         encoder_state = tf.contrib.rnn.LSTMStateTuple(c=encoder_state_c, h=encoder_state_h)
 
         # decoder
-        BOS = tf.ones([batch_size, 1], dtype=tf.int32)
-        decoder_inputs = tf.concat([BOS, decoder_inputs], axis=1)
+        BOS = tf.ones([batch_size, 1], dtype=tf.int64)
+        BOS = tf.expand_dims(BOS, 1)
+        # decoder_inputs = tf.reshape(decoder_inputs, [-1, tf.shape(decoder_inputs)[-1]])
+        decoder_inputs = tf.concat([BOS, decoder_inputs], axis=-1)
         decoder_inputs = tf.unstack(tf.nn.embedding_lookup(embedding_matrix, decoder_inputs))
         
         def test_loop(prev, i):
@@ -177,6 +183,8 @@ def get_outputs(inputs, answers, params, mode):
             shape=[vocab_size, 1],
             dtype=tf.float32)
         embedding_params_masked = embedding_params * embedding_mask
+        print ('~~~~~~~~~~~~~~~~~~~~~~')
+        print (embedding_params_masked.shape)
 
         story_embedding = tf.nn.embedding_lookup(embedding_params_masked, story)
         query_embedding = tf.nn.embedding_lookup(embedding_params_masked, query)
