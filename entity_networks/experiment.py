@@ -61,6 +61,8 @@ def generate_experiment_fn(data_dir, dataset_id, num_epochs,
             'clip_gradients': CLIP_GRADIENTS,
             'gradient_noise_scale': gradient_noise_scale,
         }
+        print ('params~~~~~~~')
+        print (params)
 
         estimator = tf.contrib.learn.Estimator(
             model_dir=output_dir,

@@ -41,7 +41,7 @@ def get_output_module(
         last_state,
         query_embedding, #new
         encoded_query,
-        decoder_inputs, #new
+        true_inputs, #new
         embedding_matrix, #new
         mode, #new
         num_blocks,
@@ -53,6 +53,8 @@ def get_output_module(
     Implementation of Section 2.3, Equation 6. This module is also described in more detail here:
     [End-To-End Memory Networks](https://arxiv.org/abs/1502.01852).
     """
+    # print ('vocab~~~~~~~~~~~~~')
+    # print (vocab_size)
     with tf.variable_scope(scope, 'Output', initializer=initializer):
         last_state = tf.stack(tf.split(last_state, num_blocks, axis=1), axis=1)
         _, _, embedding_size = last_state.get_shape().as_list()
@@ -83,9 +85,9 @@ def get_output_module(
 
         # encoder
         # seq_input = query
-        print ('QUERY_EMBEDDING~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-        print (query_embedding.shape)
-        print (query_embedding)
+        # print ('QUERY_EMBEDDING~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+        # print (query_embedding.shape)
+        # print (query_embedding)
         batch_size, _, max_length, hidden_size = query_embedding.get_shape().as_list()
         batch_size = tf.shape(query_embedding)[0]
         query_embedding = tf.reshape(query_embedding, [-1, max_length, hidden_size])
@@ -104,6 +106,7 @@ def get_output_module(
         output_fw, output_bw = encoder_outputs
         state_fw, state_bw = state
         encoder_outputs = tf.concat([y, output_fw, output_bw], 2)
+        # print (encoder_outputs.shape)
         encoder_state_c = tf.concat((state_fw.c, state_bw.c), 1)
         encoder_state_h = tf.concat((state_fw.h, state_bw.h), 1)
         encoder_state = tf.contrib.rnn.LSTMStateTuple(c=encoder_state_c, h=encoder_state_h)
@@ -111,19 +114,27 @@ def get_output_module(
         # decoder
         BOS = tf.ones([batch_size, 1], dtype=tf.int64)
         BOS = tf.expand_dims(BOS, 1)
-        # decoder_inputs = tf.reshape(decoder_inputs, [-1, tf.shape(decoder_inputs)[-1]])
-        decoder_inputs = tf.concat([BOS, decoder_inputs], axis=-1)
-        decoder_inputs = tf.unstack(tf.nn.embedding_lookup(embedding_matrix, decoder_inputs))
+        true_inputs = tf.concat([BOS, true_inputs], axis=-1)
+        # print (true_inputs.shape)
+        decoder_inputs = tf.nn.embedding_lookup(embedding_matrix, true_inputs)
+        _, _, l, h = decoder_inputs.get_shape().as_list()
+        decoder_inputs = tf.reshape(decoder_inputs, [-1, l, h])
+        # print (decoder_inputs.shape)
+        decoder_inputs = tf.unstack(decoder_inputs, axis=1)
+        # print (decoder_inputs)
+        # print ('~~~~~~~~~~~~~~~~~~~')
         
         def test_loop(prev, i):
             prev_index = tf.stop_gradient(tf.argmax(prev, axis=-1))
             pred_prev = tf.nn.embedding_lookup(embedding_matrix, prev_index)
+            pred_prev = tf.reshape(pred_prev, [l ,h])
             return pred_prev
         def train_loop(prev, i):
-            pred_prev = tf.nn.embedding_lookup(embedding_matrix, decoder_inputs[i])
+            pred_prev = tf.nn.embedding_lookup(embedding_matrix, true_inputs[i])
+            pred_prev = tf.reshape(pred_prev, [l ,h])
             return pred_prev
 
-        cell = tf.contrib.rnn.LSTMCell(num_units=hidden_size*2)
+        cell = tf.contrib.rnn.LSTMCell(num_units=hidden_size)
         if mode == tf.contrib.learn.ModeKeys.TRAIN:
         	loop_function = train_loop
         elif mode == tf.contrib.learn.ModeKeys.INFER:
@@ -183,8 +194,8 @@ def get_outputs(inputs, answers, params, mode):
             shape=[vocab_size, 1],
             dtype=tf.float32)
         embedding_params_masked = embedding_params * embedding_mask
-        print ('~~~~~~~~~~~~~~~~~~~~~~')
-        print (embedding_params_masked.shape)
+        # print ('~~~~~~~~~~~~~~~~~~~~~~')
+        # print (embedding_params_masked.shape)
 
         story_embedding = tf.nn.embedding_lookup(embedding_params_masked, story)
         query_embedding = tf.nn.embedding_lookup(embedding_params_masked, query)
@@ -229,7 +240,7 @@ def get_outputs(inputs, answers, params, mode):
             last_state=last_state,
             encoded_query=encoded_query,
             query_embedding=query_embedding,
-            decoder_inputs=answers, #new
+            true_inputs=answers, #new
             embedding_matrix=embedding_params_masked, #new
             mode=mode, #new
             num_blocks=num_blocks,
@@ -254,10 +265,17 @@ def get_loss(outputs, labels, labels_lengths, mode):
     loss = None
     if mode == tf.contrib.learn.ModeKeys.INFER:
         return loss
-    PAD = tf.ones([batch_size, 1], dtype=tf.int32)*0
-    targets = tf.unstack(tf.concat([labels, PAD], axis=1))
-    weights = tf.unstack(labels_lengths)
-    loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(logits=outputs, targets=targets, weights=weights)
+    batch_size = tf.shape(labels)[0]
+    PAD = tf.ones([batch_size, 1], dtype=tf.int64)*0
+    _, _, l = labels.get_shape().as_list()
+    labels = tf.reshape(labels, [-1, l])
+    targets = tf.unstack(tf.concat([labels, PAD], axis=1), axis=1)
+    _, _, l = labels_lengths.get_shape().as_list()
+    labels_lengths = tf.reshape(labels_lengths, [-1, l])
+    # print ('label_length~~~~~~~~~~~~')
+    # print (labels_lengths.shape)
+    weights = tf.unstack(tf.cast(labels_lengths, tf.float32), axis=1)
+    loss = tf.contrib.legacy_seq2seq.sequence_loss(logits=outputs, targets=targets, weights=weights)
 
     return loss
 
@@ -295,6 +313,8 @@ def model_fn(features, labels, mode, params):
     outputs = get_outputs(features, labels['answer'], params, mode)
     predictions = get_predictions(outputs)
     loss = get_loss(outputs, labels['answer'], labels['answer_length'], mode)
+    # print ('loss~~~~~~~~~~~~~')
+    # print (loss.shape)
     train_op = get_train_op(loss, params, mode)
 
     return tf.contrib.learn.ModelFnOps(

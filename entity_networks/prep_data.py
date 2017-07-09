@@ -19,6 +19,8 @@ import numpy as np
 
 from tqdm import tqdm
 
+jieba.initialize()
+jieba.set_dictionary('dict.txt.big')
 # set sys encoding
 # reload(sys)
 # sys.setdefaultencoding("utf-8")
@@ -183,12 +185,12 @@ def pad_stories(stories, max_sentence_length, max_story_length, max_query_length
             query.append(PAD_ID)
 
         assert len(answer) == ans_length-1
-        for _ in range(max_answer_length - len(answer)):
+        for _ in range(max_answer_length-1 - len(answer)):
             answer.append(PAD_ID)
 
         assert len(story) == max_story_length
         assert len(query) == max_query_length
-        assert len(answer) == max_answer_length
+        assert len(answer) == max_answer_length-1
 
     print("~~~~~~~~Finish padding~~~~~~~~")
     sys.stdout.flush()
