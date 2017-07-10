@@ -93,7 +93,7 @@ def get_output_module(
         query_embedding = tf.reshape(query_embedding, [-1, max_length, hidden_size])
         seq_length = tf.ones([batch_size], dtype=tf.int32) * max_length
         y_temp = y
-        for t in range(max_length):
+        for t in range(max_length-1):
             y = tf.concat((y, y_temp), 1)
         y = tf.reshape(y, [max_length, -1, hidden_size])
         y = tf.transpose(y, [1, 0, 2])
@@ -129,11 +129,11 @@ def get_output_module(
         def test_loop(prev, i):
             prev_index = tf.stop_gradient(tf.argmax(prev, axis=-1))
             pred_prev = tf.nn.embedding_lookup(embedding_matrix, prev_index)
-            pred_prev = tf.reshape(pred_prev, [l ,h])
+            pred_prev = tf.reshape(pred_prev, [-1 ,h])
             return pred_prev
         def train_loop(prev, i):
-            pred_prev = tf.nn.embedding_lookup(embedding_matrix, true_inputs[i])
-            pred_prev = tf.reshape(pred_prev, [l ,h])
+            pred_prev = tf.nn.embedding_lookup(embedding_matrix, true_inputs[:, :, i])
+            pred_prev = tf.reshape(pred_prev, [-1 ,h])
             return pred_prev
 
         cell = tf.contrib.rnn.LSTMCell(num_units=hidden_size)
