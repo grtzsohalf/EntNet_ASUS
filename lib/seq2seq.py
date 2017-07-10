@@ -941,10 +941,11 @@ def embedding_attention_entity_seq2seq(story_inputs,
     embedding = embedding_params * embedding_mask
     # Entity Network
     ##### decide KEY!!!!!!
-    keys = [i for i in range(5,25)]
+    # keys = [i for i in range(5,25)]
+    keys = [17, 28, 32, 37, 40, 56, 58, 69, 71, 93, 94, 102, 107, 110, 117, 131, 140, 150, 153, 158, 159, 170, 173, 187, 212, 247, 252, 264, 267, 299]
 
     params = {
-      'key_number': 20,
+      'key_number': 30,
       'vocab_size': num_encoder_symbols,
       'batch_size': batch_size,
       'embedding_size': embedding_size,
