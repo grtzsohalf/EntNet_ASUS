@@ -6,3 +6,4 @@ model/*
 .env/*
 *.pyc
 .DS_Store
+works/*

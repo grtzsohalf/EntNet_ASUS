@@ -52,8 +52,8 @@ def get_outputs(story, query, keys, params, embedding_matrix, buckets):
     "Return the outputs from the model which will be used in the loss function."
     num_blocks = params['key_number']
     vocab_size = params['vocab_size']
-    batch_size = params['batch_size']
     embedding_size = params['embedding_size']
+    batch_size = tf.shape(story)[0]
     size = embedding_size
 
     query = tf.stack(query, axis=1)

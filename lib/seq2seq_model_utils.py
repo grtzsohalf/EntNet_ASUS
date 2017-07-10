@@ -73,9 +73,9 @@ def cal_bleu(cands, ref, stopwords=['的', '嗎']):
     
 
 
-def get_predicted_sentence(args, input_sentence, vocab, rev_vocab, model, sess, debug=False, return_raw=False):
-    def model_step(enc_inp, dec_inp, dptr, target_weights, bucket_id):
-      _, _, logits = model.step(sess, enc_inp, dec_inp, target_weights, bucket_id, forward_only=True)
+def get_predicted_sentence(args, input_story, input_sentence, vocab, rev_vocab, model, sess, debug=False, return_raw=False):
+    def model_step(sto_inp, enc_inp, dec_inp, dptr, target_weights, bucket_id):
+      _, _, logits = model.step(sess, sto_inp, enc_inp, dec_inp, target_weights, bucket_id, forward_only=True)
       prob = softmax(logits[dptr][0])
       # print("model_step @ %s" % (datetime.now()))
       return prob
@@ -88,26 +88,31 @@ def get_predicted_sentence(args, input_sentence, vocab, rev_vocab, model, sess, 
       output_sentence = ' '.join([dict_lookup(rev_vocab, t) for t in selected_token_ids])
       return output_sentence
 
+    story_token_ids = [ data_utils.sentence_to_token_ids(s, vocab) for s in input_story]
     input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
 
+
     # Which bucket does it belong to?
+    if len(input_token_ids) > args.buckets[-1][0]:
+      input_token_ids = input_token_ids[:args.buckets[-1][0]-1]
     bucket_id = min([b for b in range(len(args.buckets)) if args.buckets[b][0] > len(input_token_ids)])
     outputs = []
-    feed_data = {bucket_id: [(input_token_ids, outputs)]}
+
+    feed_data = {bucket_id: [(story_token_ids, input_token_ids, outputs)]}
 
     # Get a 1-element batch to feed the sentence to the model.
-    encoder_inputs, decoder_inputs, target_weights = model.get_batch(feed_data, bucket_id)
+    story_inputs, encoder_inputs, decoder_inputs, target_weights = model.get_batch(feed_data, bucket_id)
     if debug: print("\n[get_batch]\n", encoder_inputs, decoder_inputs, target_weights)
 
     ### Original greedy decoding
     if args.beam_size == 1:
-      _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+      _, _, output_logits = model.step(sess, story_inputs, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
       return [{"dec_inp": greedy_dec(output_logits, rev_vocab), 'prob': 1}]
 
     # Get output logits for the sentence.
     beams, new_beams, results = [(1, 0, {'eos': 0, 'dec_inp': decoder_inputs, 'prob': 1, 'prob_ts': 1, 'prob_t': 1})], [], [] # initialize beams as (log_prob, empty_string, eos)
     dummy_encoder_inputs = [np.array([data_utils.PAD_ID]) for _ in range(len(encoder_inputs))]
-    
+    dummy_story_inputs = np.array([[data_utils.PAD_ID]*15]*4)
     for dptr in range(len(decoder_inputs)-1):
       if dptr > 0: 
         target_weights[dptr] = [1.]
@@ -122,10 +127,10 @@ def get_predicted_sentence(args, input_sentence, vocab, rev_vocab, model, sess, 
         # normal seq2seq
         if debug: print(cand['prob'], " ".join([dict_lookup(rev_vocab, w) for w in cand['dec_inp']]))
 
-        all_prob_ts = model_step(encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
+        all_prob_ts = model_step(story_inputs, encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
         if args.antilm:
           # anti-lm
-          all_prob_t  = model_step(dummy_encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
+          all_prob_t  = model_step(dummy_story_inputs, dummy_encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
           # adjusted probability
           all_prob    = all_prob_ts - args.antilm * all_prob_t #+ args.n_bonus * dptr + random() * 1e-50
         else:
