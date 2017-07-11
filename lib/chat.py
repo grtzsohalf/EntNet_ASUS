@@ -29,7 +29,7 @@ def chat(args):
         if isinstance(word, bytes):
           word = word.decode()
         return word
-    dicts = [word = rev_vocab[k] for k in keys]
+    dicts = [rev_vocab[k] for k in keys]
 
     while jieba_sentence:
         print (history_list)
