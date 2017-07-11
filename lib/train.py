@@ -78,10 +78,10 @@ def train(args):
               train_set, bucket_id)
           # print("[shape]", np.shape(encoder_inputs), np.shape(decoder_inputs), np.shape(target_weights))
           if args.reinforce_learn:
-            _, step_loss, _ = model.step_rf(args, sess, encoder_inputs, decoder_inputs,
+            _, step_loss, _, _ = model.step_rf(args, sess, encoder_inputs, decoder_inputs,
                                          target_weights, bucket_id, rev_vocab=rev_vocab)
           else:
-            _, step_loss, _ = model.step(sess, story_inputs, encoder_inputs, decoder_inputs,
+            _, step_loss, _, _ = model.step(sess, story_inputs, encoder_inputs, decoder_inputs,
                                          target_weights, bucket_id, forward_only=False, force_dec_input=True)
 
           step_time += (time.time() - start_time) / args.steps_per_checkpoint
@@ -109,7 +109,7 @@ def train(args):
             # Run evals on development set and print their perplexity.
             for bucket_id in xrange(len(args.buckets)):
               story_inputs, encoder_inputs, decoder_inputs, target_weights = model.get_batch(dev_set, bucket_id)
-              _, eval_loss, _ = model.step(sess, story_inputs, encoder_inputs, decoder_inputs, 
+              _, eval_loss, _, _ = model.step(sess, story_inputs, encoder_inputs, decoder_inputs, 
                                           target_weights, bucket_id, forward_only=True, force_dec_input=False)
 
               eval_ppx = math.exp(eval_loss) if eval_loss < 300 else float('inf')

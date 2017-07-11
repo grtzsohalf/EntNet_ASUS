@@ -950,7 +950,7 @@ def embedding_attention_entity_seq2seq(story_inputs,
       'batch_size': batch_size,
       'embedding_size': embedding_size,
     }
-    entity_vector = entity_model.get_outputs( story_inputs, encoder_inputs, keys, params, embedding, buckets)
+    entity_vector, attention = entity_model.get_outputs( story_inputs, encoder_inputs, keys, params, embedding, buckets)
     # Encoder.
     encoder_embedding_inputs = [ tf.nn.embedding_lookup(embedding, x) for x in encoder_inputs ]
     encoder_outputs, encoder_state = core_rnn.static_rnn(
@@ -984,7 +984,7 @@ def embedding_attention_entity_seq2seq(story_inputs,
           output_projection=output_projection,
           feed_previous=feed_previous,
           initial_state_attention=initial_state_attention)
-      return outputs, state, encoder_state
+      return outputs, state, encoder_state, attention
 
     # If feed_previous is a Tensor, we construct 2 graphs and use cond.
     def decoder(feed_previous_bool):
@@ -1018,7 +1018,7 @@ def embedding_attention_entity_seq2seq(story_inputs,
     if nest.is_sequence(encoder_state):
       state = nest.pack_sequence_as(
           structure=encoder_state, flat_sequence=state_list)
-    return outputs_and_state[:outputs_len], state, encoder_state
+    return outputs_and_state[:outputs_len], state, encoder_state, attention
 
 def entity_embedding_attention_decoder(decoder_inputs,
                                 initial_state,
@@ -1343,7 +1343,7 @@ def model_with_buckets(story_inputs,
     for j, bucket in enumerate(buckets):
       with variable_scope.variable_scope(
           variable_scope.get_variable_scope(), reuse=True if j > 0 else None):
-        bucket_outputs, decoder_states, encoder_state = seq2seq(story_inputs, encoder_inputs[:bucket[0]],
+        bucket_outputs, decoder_states, encoder_state, attention = seq2seq(story_inputs, encoder_inputs[:bucket[0]],
                                     decoder_inputs[:bucket[1]])
         outputs.append(bucket_outputs)
         encoder_states.append(encoder_state)
@@ -1363,4 +1363,4 @@ def model_with_buckets(story_inputs,
                   weights[:bucket[1]],
                   softmax_loss_function=softmax_loss_function))
 
-  return outputs, losses, encoder_states
+  return outputs, losses, encoder_states, attention

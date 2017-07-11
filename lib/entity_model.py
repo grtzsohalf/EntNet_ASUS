@@ -33,6 +33,7 @@ def get_output_module( last_state, encoded_query, num_blocks, vocab_size, activa
         # Subtract max for numerical stability (softmax is shift invariant)
         attention_max = tf.reduce_max(attention, axis=-1, keep_dims=True)
         attention = tf.nn.softmax(attention - attention_max)
+        new_attention = attention
         attention = tf.expand_dims(attention, axis=2)
 
         # Weight memories by attention vectors
@@ -44,9 +45,10 @@ def get_output_module( last_state, encoded_query, num_blocks, vocab_size, activa
 
         q = tf.squeeze(encoded_query, axis=1)
         y = tf.matmul(activation(q + tf.matmul(u, H)), R)
-        return y
+        return y, new_attention
     outputs = None
-    return outputs
+    attention = None
+    return outputs, new_attention
 
 def get_outputs(story, query, keys, params, embedding_matrix, buckets):
     "Return the outputs from the model which will be used in the loss function."
@@ -107,7 +109,7 @@ def get_outputs(story, query, keys, params, embedding_matrix, buckets):
             initial_state=initial_state)
 
         # Output Module
-        outputs = get_output_module(
+        outputs, attention = get_output_module(
             last_state=last_state,
             encoded_query=encoded_query,
             num_blocks=num_blocks,
@@ -118,4 +120,4 @@ def get_outputs(story, query, keys, params, embedding_matrix, buckets):
         parameters = model_ops.count_parameters()
         print('Parameters: {}'.format(parameters))
 
-        return outputs
+        return outputs, attention
